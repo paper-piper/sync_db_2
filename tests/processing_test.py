@@ -35,23 +35,29 @@ def assert_synchronizer_multiprocessing():
     db = {}
     for i in range(DATABASE_LENGTH):
         db[i] = False
+
+    # Create shared synchronization objects for multiprocessing
+    read_semaphore = multiprocessing.Semaphore(MAX_READERS)
+    write_lock = multiprocessing.Lock()
+
+    # Initialize SynchronizerDB with shared locks and semaphore
     sync_db = SynchronizerDB(
         FILENAME,
-        SyncState.PROCESSES,  # Assuming this supports processes
+        SyncState.PROCESSES,
         MAX_READERS,
-        db
+        db,
+        read_semaphore=read_semaphore,
+        write_lock=write_lock
     )
 
     processes = []
 
     for i in range(READERS_NUM):
-        # make processes work in range between 0-20
         index = i % DATABASE_LENGTH
         p = multiprocessing.Process(target=reader_work, args=(sync_db, index))
         processes.append(p)
 
     for i in range(2, WRITERS_NUM):
-        # make processes work in range between 10-20
         index = (i % (DATABASE_LENGTH // 2)) + DATABASE_LENGTH // 2
         p = multiprocessing.Process(target=writer_work, args=(sync_db, index, i))
         processes.append(p)
