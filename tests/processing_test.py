@@ -1,10 +1,9 @@
-import multiprocessing
-from logging_utils import setup_logger
-from database.synchronizer_db import SynchronizerDB, SyncState
+from multiprocessing import Process
+from database.synchronizer_db import SynchronizerDB  # Ensure synchronizer_db.py is the file containing SynchronizerDB
+import random
+import time
 
-logger = setup_logger('multiprocessing_test')
-
-FILENAME = "assertions_test.pickle"
+# Configuration parameters
 MAX_READERS = 10
 READERS_NUM = 10
 WRITERS_NUM = 20
@@ -12,68 +11,64 @@ LOOP_TIMES = 10
 DATABASE_LENGTH = 20
 
 
-def reader_work(sync_db, key):
+def reader_work(filename, key):
+    sync_db = SynchronizerDB(filename, max_readers=MAX_READERS)
     for i in range(LOOP_TIMES):
-        sync_db.get_value(key)
+        value = sync_db.get_value(key)
+        print(f"Reader Process {i}: Read value {value} for key {key}")
+        time.sleep(random.uniform(0.1, 0.5))  # Random sleep to simulate variable read times
 
 
-def writer_work(sync_db, key, value):
+def writer_work(filename, key, value):
+    sync_db = SynchronizerDB(filename, max_readers=MAX_READERS)
     for i in range(LOOP_TIMES):
         sync_db.set_value(key, value)
+        print(f"Writer Process {i}: Wrote value {value} to key {key}")
+        time.sleep(random.uniform(0.1, 0.5))  # Random sleep to simulate variable write times
 
 
-def special_writer_work(sync_db):
+def special_writer_work(filename):
+    sync_db = SynchronizerDB(filename, max_readers=MAX_READERS)
     for i in range(LOOP_TIMES):
-        sync_db.set_value(i % (DATABASE_LENGTH // 2), 1)
+        key = i % (DATABASE_LENGTH // 2)
+        sync_db.set_value(key, 1)
+        print(f"Special Writer Process {i}: Wrote value 1 to key {key}")
+        time.sleep(random.uniform(0.1, 0.5))  # Random sleep to simulate variable write times
 
 
-def assert_synchronizer_multiprocessing():
-    """
-    Run the same simple db assertion using multiple processes.
-    :return: None
-    """
-    db = {}
-    for i in range(DATABASE_LENGTH):
-        db[i] = False
+def main():
+    # Path to database file for SynchronizerDB
+    db_file = "database.db"  # This would be the filename for your FileDB superclass
 
-    # Create shared synchronization objects for multiprocessing
-    read_semaphore = multiprocessing.Semaphore(MAX_READERS)
-    write_lock = multiprocessing.Lock()
+    # Generate random keys and values for writers
+    writer_key = 0
+    writer_value = 5
 
-    # Initialize SynchronizerDB with shared locks and semaphore
-    sync_db = SynchronizerDB(
-        FILENAME,
-        SyncState.PROCESSES,
-        MAX_READERS,
-        db,
-        read_semaphore=read_semaphore,
-        write_lock=write_lock
-    )
+    # Create reader processes
+    reader_processes = [
+        Process(target=reader_work, args=(db_file, reader_key))
+        for reader_key in range(READERS_NUM)
+    ]
 
-    processes = []
+    # Create writer processes
+    writer_processes = [
+        Process(target=writer_work, args=(db_file, writer_key, writer_value))
+        for _ in range(WRITERS_NUM)
+    ]
 
-    for i in range(READERS_NUM):
-        index = i % DATABASE_LENGTH
-        p = multiprocessing.Process(target=reader_work, args=(sync_db, index))
-        processes.append(p)
+    # Create a special writer process
+    special_writer = Process(target=special_writer_work, args=(db_file,))
 
-    for i in range(2, WRITERS_NUM):
-        index = (i % (DATABASE_LENGTH // 2)) + DATABASE_LENGTH // 2
-        p = multiprocessing.Process(target=writer_work, args=(sync_db, index, i))
-        processes.append(p)
-
-    special_process = multiprocessing.Process(target=special_writer_work, args=(sync_db,))
-    processes.append(special_process)
-
-    for process in processes:
+    # Start all processes
+    for process in reader_processes + writer_processes + [special_writer]:
         process.start()
 
-    for process in processes:
+    # Wait for all processes to complete
+    for process in reader_processes + writer_processes + [special_writer]:
         process.join()
 
-    for i in range(DATABASE_LENGTH):
-        print(sync_db.get_value(i))
+    print("All processes completed.")
 
 
 if __name__ == "__main__":
-    assert_synchronizer_multiprocessing()
+    main()
