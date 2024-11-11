@@ -15,6 +15,14 @@ logger = setup_logger("Windows_processes")
 
 
 def start_process(role, filename, key, value=None):
+    """
+    Create a simple one process
+    :param role: reader or writer
+    :param filename: the filename to write to
+    :param key: which key to accesses to
+    :param value: which value to write (if writer)
+    :return: The process handle
+    """
     command = f'python worker_script.py {role} {filename} {key} {value or 0} {LOOP_TIMES}'
     process_info = win32process.CreateProcess(
         None,               # Application name (use None if specifying the command line)
@@ -32,6 +40,10 @@ def start_process(role, filename, key, value=None):
 
 
 def main():
+    """
+    Run multiple process on the sync db object
+    :return:
+    """
     logger.info("Starting the SynchronizerDB process simulation.")
 
     # Start reader processes
